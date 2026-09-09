@@ -160,6 +160,7 @@
   var myId = null;
   var latestState = null;
   var prevState = null;
+  var lastStateArrival = 0;
   var ringsVanishedSeen = 0;
   var clock = 0; // relógio cosmético local, só pra animações (bounce de powerup etc.)
   var particles = []; // debris de explosão e fragmentos do "pop" de power-up
@@ -171,7 +172,7 @@
   var CELL = 40;
 
   /* ==================== ÁUDIO (sintetizado, igual ao protótipo) ==================== */
-  var audioCtx=null, masterGain=null, muted=false;
+  var audioCtx=null, masterGain=null, musicGain=null, muted=false;
   function ensureAudio(){
     if(!audioCtx){
       var AC = window.AudioContext || window.webkitAudioContext;
@@ -180,6 +181,9 @@
       masterGain = audioCtx.createGain();
       masterGain.gain.value = 0.8;
       masterGain.connect(audioCtx.destination);
+      musicGain = audioCtx.createGain();
+      musicGain.gain.value = 0.5;
+      musicGain.connect(masterGain);
     }
     if(audioCtx.state==='suspended') audioCtx.resume();
   }
@@ -220,6 +224,41 @@
     if(masterGain) masterGain.gain.value = muted?0:0.8;
     document.getElementById('mute-btn').textContent = muted?'🔇':'🔊';
   });
+
+  /* ---- trilha de fundo: baixo + melodia sobre C - G - Am - F, em loop ---- */
+  function scheduleMusicNote(freq,dur,type,vol,startTime){
+    if(!audioCtx) return;
+    var osc=audioCtx.createOscillator(), g=audioCtx.createGain();
+    osc.type=type; osc.frequency.setValueAtTime(freq,startTime);
+    g.gain.setValueAtTime(0,startTime);
+    g.gain.linearRampToValueAtTime(vol,startTime+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001,startTime+dur);
+    osc.connect(g).connect(musicGain);
+    osc.start(startTime); osc.stop(startTime+dur+0.03);
+  }
+  var BASS_STEP = 0.3, MELODY_STEP = 0.15;
+  var BASS_NOTES = [130.81,130.81,196.00,196.00,220.00,220.00,174.61,174.61];
+  var MELODY_NOTES = [523.25,659.25,783.99,659.25, 392.00,493.88,587.33,493.88, 440.00,523.25,659.25,523.25, 349.23,440.00,523.25,440.00];
+  var musicPlaying=false, bassStep=0, melodyStep=0, nextBassTime=0, nextMelodyTime=0;
+  function scheduleMusic(){
+    if(!musicPlaying || !audioCtx) return;
+    while(nextBassTime < audioCtx.currentTime + 0.3){
+      if(!muted) scheduleMusicNote(BASS_NOTES[bassStep % BASS_NOTES.length], BASS_STEP*0.85, 'triangle', 0.1, nextBassTime);
+      bassStep++; nextBassTime += BASS_STEP;
+    }
+    while(nextMelodyTime < audioCtx.currentTime + 0.3){
+      if(!muted) scheduleMusicNote(MELODY_NOTES[melodyStep % MELODY_NOTES.length], MELODY_STEP*0.8, 'square', 0.045, nextMelodyTime);
+      melodyStep++; nextMelodyTime += MELODY_STEP;
+    }
+    requestAnimationFrame(scheduleMusic);
+  }
+  function startMusic(){
+    if(!audioCtx || musicPlaying) return;
+    musicPlaying=true; bassStep=0; melodyStep=0;
+    nextBassTime=audioCtx.currentTime+0.1; nextMelodyTime=audioCtx.currentTime+0.1;
+    scheduleMusic();
+  }
+  function stopMusic(){ musicPlaying=false; }
 
   /* ==================== MENU / LOBBY ==================== */
   var menuScreen = document.getElementById('menu-screen');
@@ -317,11 +356,13 @@
     ringsVanishedSeen = 0;
     particles = []; pops = []; shake.mag=0; shake.t=0;
     resizeCanvas();
+    startMusic();
   });
 
   socket.on('state', function(s){
     prevState = latestState;
     latestState = s;
+    lastStateArrival = performance.now();
     handleAudioDiffs(prevState, latestState);
   });
 
@@ -343,6 +384,7 @@
     }
     endScreen.hidden = false;
     hud.hidden = true; joystickZone.hidden = true; bombBtn.hidden = true; roomCodeTag.hidden = true;
+    stopMusic();
   });
 
   document.getElementById('restart-btn').addEventListener('click', function(){
@@ -632,6 +674,30 @@
     else if(el >= CFG.shrinkStart && el < CFG.shrinkStart + CFG.ringInterval*CFG.ringsToRemove){ banner.hidden=false; banner.textContent='⚠️ O MAPA ESTÁ ENCOLHENDO!'; }
     else { banner.hidden = true; }
   }
+  /* ==================== INTERPOLAÇÃO ENTRE ESTADOS (movimento mais suave) ====================
+     O servidor só atualiza ~30x/s, mas a tela redesenha a ~60x/s. Sem isso, o
+     movimento fica "em degrau". Aqui a gente desliza suavemente da posição do
+     estado anterior pra do estado atual, ao longo do tempo real que já passou
+     desde que esse estado chegou — sem inventar posição nenhuma, só suavizando
+     a transição entre dois pontos que o servidor realmente mandou. */
+  var ESTIMATED_TICK_MS = 1000/30;
+  function getRenderEntities(cur){
+    if(!prevState) return cur.entities;
+    var t = (performance.now() - lastStateArrival) / ESTIMATED_TICK_MS;
+    if(t<0) t=0; if(t>1) t=1;
+    return cur.entities.map(function(e){
+      var old = prevState.entities.find(function(o){ return o.id===e.id; });
+      if(!old) return e;
+      var dist = Math.hypot(e.x-old.x, e.y-old.y);
+      // Pulo grande (respawn, início de partida) não interpola — só teleporta.
+      if(dist>3) return e;
+      return Object.assign({}, e, {
+        x: old.x + (e.x-old.x)*t,
+        y: old.y + (e.y-old.y)*t
+      });
+    });
+  }
+
   function render(){
     if(!latestState || !latestState.grid) return;
     var s = latestState;
@@ -653,7 +719,7 @@
     s.powerups.forEach(drawPowerup);
     s.bombs.forEach(drawBomb);
     s.explosions.forEach(drawExplosion);
-    s.entities.forEach(drawEntity);
+    getRenderEntities(s).forEach(drawEntity);
     drawParticles();
     drawPops();
     ctx.restore();
