@@ -47,6 +47,11 @@ const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
 const PLAYER_COLORS = ['#4f7cff', '#ff6b6b', '#3ddc84', '#ffd23f'];
 const BOT_TAG_COLOR = '#9b5de5'; // só usado se sobrar mais de uma cor pra bot (raro com 4 max)
 
+/* ==================== TEMA VISUAL (a paleta/textura em si é só do cliente;
+   o servidor só decide QUAL tema vale pra rodada, pra todo mundo ver o mesmo) */
+const THEMES = ['classic', 'ice'];
+function pickTheme(){ return THEMES[Math.floor(Math.random()*THEMES.length)]; }
+
 /* ==================== MAPA ==================== */
 function cornerSpawns(){
   return [
@@ -684,6 +689,7 @@ function handleLeave(room, socket){
 /* ==================== INÍCIO E FIM DE PARTIDA ==================== */
 function beginRoom(room){
   room.grid = generateMap(room.maxPlayers);
+  room.theme = pickTheme();
   room.bombs = []; room.explosions = []; room.powerups = [];
   room.ringsVanished = new Set();
   room.elapsed = 0;
@@ -707,7 +713,7 @@ function beginRoom(room){
   }
 
   room.state = 'playing';
-  io.to(room.code).emit('gameStart', { cols: CFG.cols, rows: CFG.rows, roundTime: CFG.roundTime });
+  io.to(room.code).emit('gameStart', { cols: CFG.cols, rows: CFG.rows, roundTime: CFG.roundTime, theme: room.theme });
   startRoomLoop(room);
 }
 
