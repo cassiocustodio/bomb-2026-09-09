@@ -523,6 +523,12 @@
     var sparkAlpha = 0.6+0.4*Math.sin(clock*30);
     ctx.fillStyle='rgba(255,180,60,'+sparkAlpha+')';
     ctx.beginPath(); ctx.arc(px,py-rad-4,3,0,Math.PI*2); ctx.fill();
+    
+    // indicador numérico de força (alcance da explosão)
+    ctx.font='700 '+Math.round(CELL*0.24)+'px Baloo 2, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#fff';
+    ctx.fillText(String(b.range), px, py+1);    
   }
   function drawExplosion(exp){
     var k = 1-(exp.t/exp.duration);
@@ -601,7 +607,7 @@
   function currentShakeOffset(){
     if(shake.t <= 0) return {x:0,y:0};
     var k = shake.t/0.28;
-    var amt = shake.mag*k;
+    var amt = shake.mag*k*0.7; // 0.7 = ~30% menos tremor; ajuste esse fator à vontade
     return { x:(Math.random()*2-1)*amt, y:(Math.random()*2-1)*amt };
   }
   var POWERUP_COLORS = { bomb:'#4f7cff', fire:'#ff6b3d', speed:'#3ddc84', bombpass:'#9b5de5', curse:'#2b2b2b', shield:'#ffd23f' };
