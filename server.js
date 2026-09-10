@@ -795,7 +795,7 @@ function broadcastState(room){
         bombPass:e.bombPass, shieldActive:e.shieldActive
       };
     }),
-    bombs: room.bombs.map(function(b){ return {gx:b.gx, gy:b.gy, timer:b.timer}; }),
+    bombs: room.bombs.map(function(b){ return {gx:b.gx, gy:b.gy, timer:b.timer, range:b.range}; }),
     explosions: room.explosions.map(function(x){ return {cells:x.cells, t:x.t, duration:x.duration}; }),
     powerups: room.powerups.map(function(p){ return {gx:p.gx, gy:p.gy, type:p.type}; })
   });
