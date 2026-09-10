@@ -361,6 +361,29 @@ function checkPowerupPickup(room){
     }
   });
 }
+function checkCurseContagion(room){
+  var ents = room.entities;
+  for(var i=0; i<ents.length; i++){
+    var a = ents[i];
+    if(!a.alive || !a.curse) continue; // só entidades já amaldiçoadas contagiam
+    for(var j=0; j<ents.length; j++){
+      if(i===j) continue;
+      var b = ents[j];
+      if(!b.alive || b.curse) continue; // quem já tem maldição não pega outra
+
+      var dx = a.x - b.x, dy = a.y - b.y;
+      var dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist < a.r + b.r){ // "encostou"
+        b.curse = a.curse;           // pega EXATAMENTE a mesma maldição
+        b.curseTimer = CFG.curseDuration;
+        b.curseSeq = null;
+        // mesma regra do pickup normal: maldição cancela buffs em vigor
+        b.bombPass = false; b.bombPassTimer = 0;
+        b.shieldActive = false; b.shieldTimer = 0;
+      }
+    }
+  }
+}
 function updateStatusEffects(room, dt){
   room.entities.forEach(function(ent){
     if(!ent.alive) return;
@@ -775,6 +798,7 @@ function tickRoom(room, dt){
 
   updateBombs(room, dt);
   updateStatusEffects(room, dt);
+  checkCurseContagion(room);
   updateShrink(room);
   checkPowerupPickup(room);
 
