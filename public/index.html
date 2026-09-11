@@ -59,13 +59,13 @@
 
   #end-actions{ display:flex; gap:10px; margin-top:6px; }
   #end-actions .btn{ margin-top:0; width:auto; flex:1; }
-  #peek-btn{ flex:0 0 auto; width:48px; height:48px; padding:0; font-size:20px; border-radius:50%; border:3px solid var(--gold); background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 0 rgba(0,0,0,.3); }
-  #peek-btn:active{ box-shadow:0 1px 0 rgba(0,0,0,.3); transform:translateY(3px); }
+  #end-actions{ display:flex; gap:10px; margin-top:6px; }
+  #end-actions .btn{ margin-top:0; width:auto; flex:1; }
+  #end-actions #peek-btn{ flex:0 0 40px; width:40px; padding:0; font-size:20px; }
   #peek-btn[hidden]{ display:none; }
 
-  #exit-spectate-btn{ position:fixed; top:calc(10px + env(safe-area-inset-top)); right:14px; width:44px; height:44px; border-radius:50%; background:var(--ink); border:3px solid var(--gold); color:#fff; font-size:18px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 0 rgba(0,0,0,.3); z-index:10; }
-  #exit-spectate-btn:active{ box-shadow:0 1px 0 rgba(0,0,0,.3); transform:translateY(3px); }
-  #exit-spectate-btn[hidden]{ display:none; }
+  #exit-spectate-btn{ position:fixed; left:14px; top:calc(60px + env(safe-area-inset-top)); width:auto; padding:10px 22px; font-size:15px; z-index:10; }
+  #exit-spectate-btn[hidden]{ display:none; }  
 
   .mode-select{ display:flex; gap:8px; margin:10px 0; }
   .mode-btn{ flex:1; padding:10px 6px; border-radius:12px; border:3px solid var(--crate-dark); background:#fff; color:var(--ink); font-weight:800; font-family:inherit; font-size:14px; cursor:pointer; }
@@ -102,7 +102,7 @@
   </div>
   <div id="shrink-banner" hidden></div>
   <div id="room-code-tag" hidden>SALA <span id="room-code-text"></span></div>
-  <button id="exit-spectate-btn" title="Sair" hidden>🚪</button>  
+  <button class="btn" id="exit-spectate-btn" hidden>Menu</button>
 
   <div id="joystick-zone" hidden>
     <div id="joystick-hint"></div>
@@ -144,7 +144,7 @@
       <p id="end-subtitle"></p>
       <div id="end-actions">
         <button class="btn" id="restart-btn">Voltar ao menu</button>
-        <button id="peek-btn" title="Observar" hidden>👁️</button>
+        <button class="btn secondary" id="peek-btn" title="Observar" hidden>👁️</button>
       </div>
     </div>
   </div>
@@ -534,7 +534,11 @@
     var meOld = prev.entities.find(function(e){ return e.id===myId; });
     var meNew = cur.entities.find(function(e){ return e.id===myId; });
     if(meOld && meNew){
-      if(meOld.alive && !meNew.alive){ sfx.death(); showEliminatedMidMatch(); }
+      if(meOld.alive && !meNew.alive){
+        sfx.death();
+        var othersAlive = cur.entities.filter(function(e){ return e.id!==myId && e.alive; }).length;
+        if(othersAlive >= 2) showEliminatedMidMatch(); // se só resta 1 (ou 0), a partida está acabando agora — o gameOver de verdade já vem em seguida
+      }
       else if(meNew.alive && (meNew.maxBombs>meOld.maxBombs || meNew.fireRange>meOld.fireRange || meNew.speedLevel>meOld.speedLevel)) sfx.pickup();
     }
   }
