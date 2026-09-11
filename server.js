@@ -13,6 +13,14 @@ const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
 
+require('dotenv').config();
+const { createClient } = require('@supabase/supabase-js');
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 const httpServer = http.createServer(app);
@@ -133,6 +141,7 @@ function newEntity(id, x, y, color, isBot){
     curse:null, curseTimer:0, curseSeq:null,
     alive:true, deathTimer:0, deathReason:'',
     ownedStickers: [], lastStickerAt: 0,
+    userId: null, nickname: null, // preenchidos se estiver logado; null = convidado
     input: isBot ? null : {ix:0, iy:0},
     ai: isBot ? {decisionTimer:0, ix:0, iy:0} : null
   };
@@ -690,16 +699,45 @@ function socketRoom(socket){
 function broadcastLobby(room){
   var players = [];
   room.sockets.forEach(function(entity, socketId){
-    players.push({ id: socketId, color: entity.color, isHost: socketId===room.hostSocketId });
+    players.push({ id: socketId, color: entity.color, isHost: socketId===room.hostSocketId, nickname: entity.nickname });
   });
   io.to(room.code).emit('lobbyUpdate', { code: room.code, maxPlayers: room.maxPlayers, players: players });
 }
 
-function joinRoomSocket(room, socket, cb){
+async function getPlayerAccount(accessToken){
+  if(!accessToken) return null; // sem token = convidado
+
+  var authRes = await supabaseAdmin.auth.getUser(accessToken);
+  if(authRes.error || !authRes.data || !authRes.data.user) return null; // token inválido/expirado
+
+  var userId = authRes.data.user.id;
+  var profileRes = await supabaseAdmin
+    .from('profiles')
+    .select('nickname, owned_stickers, coins, wins, matches_played')
+    .eq('id', userId)
+    .single();
+  if(profileRes.error || !profileRes.data) return null;
+
+  return {
+    userId: userId,
+    nickname: profileRes.data.nickname,
+    ownedStickers: profileRes.data.owned_stickers || []
+  };
+}
+
+async function joinRoomSocket(room, socket, cb, accessToken){
   socket.join(room.code);
   socket.data.roomCode = room.code;
   var color = PLAYER_COLORS[room.sockets.size % PLAYER_COLORS.length];
   var entity = newEntity(socket.id, 1.5, 1.5, color, false);
+
+  var account = await getPlayerAccount(accessToken);
+  if(account){
+    entity.userId = account.userId;
+    entity.nickname = account.nickname;
+    entity.ownedStickers = account.ownedStickers; // já prepara terreno pra Fase 3
+  }
+
   room.sockets.set(socket.id, entity);
   room.entities.push(entity);
   if(!room.hostSocketId) room.hostSocketId = socket.id;
@@ -863,7 +901,7 @@ io.on('connection', function(socket){
     var code = makeRoomCode();
     var room = createRoomObj(code, maxPlayers);
     rooms.set(code, room);
-    joinRoomSocket(room, socket, cb);
+    joinRoomSocket(room, socket, cb, opts && opts.accessToken);
   });
 
   socket.on('joinRoom', function(opts, cb){
@@ -872,7 +910,7 @@ io.on('connection', function(socket){
     if(!room){ cb && cb({ok:false, error:'Sala não encontrada.'}); return; }
     if(room.state !== 'lobby'){ cb && cb({ok:false, error:'Essa sala já começou a partida.'}); return; }
     if(room.sockets.size >= room.maxPlayers){ cb && cb({ok:false, error:'Sala cheia.'}); return; }
-    joinRoomSocket(room, socket, cb);
+    joinRoomSocket(room, socket, cb, opts && opts.accessToken);
   });
 
   socket.on('startGame', function(){
