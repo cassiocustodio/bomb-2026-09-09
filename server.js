@@ -47,6 +47,29 @@ const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
 const PLAYER_COLORS = ['#4f7cff', '#ff6b6b', '#3ddc84', '#ffd23f'];
 const BOT_TAG_COLOR = '#9b5de5'; // só usado se sobrar mais de uma cor pra bot (raro com 4 max)
 
+/* ==================== STICKERS ====================
+   Catálogo central. "tier":
+   - 'standard': todo mundo já possui, não precisa checar posse.
+   - 'premium' : só quem tiver o id em entity.ownedStickers (colecionável/comprado/conquistado).
+   O id é o mesmo nome do arquivo em public/stickers/<id>.webp, sem extensão. */
+const STICKER_CATALOG = [
+  { id:'bravo', name:'Bravo!', tier:'standard' }
+  // adesivos premium futuros entram aqui, ex:
+  // { id:'confete', name:'Confete', tier:'premium' }
+];
+const STICKER_COOLDOWN_MS = 1200; // intervalo mínimo entre um envio e outro, por jogador
+
+function findSticker(id){
+  for(var i=0;i<STICKER_CATALOG.length;i++){ if(STICKER_CATALOG[i].id===id) return STICKER_CATALOG[i]; }
+  return null;
+}
+function playerOwnsSticker(entity, id){
+  var s = findSticker(id);
+  if(!s) return false;
+  if(s.tier==='standard') return true;
+  return entity.ownedStickers.indexOf(id) !== -1;
+}
+
 /* ==================== TEMA VISUAL (a paleta/textura em si é só do cliente;
    o servidor só decide QUAL tema vale pra rodada, pra todo mundo ver o mesmo) */
 const THEMES = ['classic', 'ice'];
@@ -108,6 +131,7 @@ function newEntity(id, x, y, color, isBot){
     shieldActive:false, shieldTimer:0,
     curse:null, curseTimer:0, curseSeq:null,
     alive:true, deathTimer:0, deathReason:'',
+    ownedStickers: [], lastStickerAt: 0,
     input: isBot ? null : {ix:0, iy:0},
     ai: isBot ? {decisionTimer:0, ix:0, iy:0} : null
   };
@@ -678,7 +702,7 @@ function joinRoomSocket(room, socket, cb){
   room.sockets.set(socket.id, entity);
   room.entities.push(entity);
   if(!room.hostSocketId) room.hostSocketId = socket.id;
-  if(cb) cb({ ok:true, code: room.code, you: socket.id, isHost: room.hostSocketId===socket.id, maxPlayers: room.maxPlayers });
+  if(cb) cb({ ok:true, code: room.code, you: socket.id, isHost: room.hostSocketId===socket.id, maxPlayers: room.maxPlayers, stickers: STICKER_CATALOG, ownedStickers: entity.ownedStickers });
   broadcastLobby(room);
 }
 
@@ -871,6 +895,19 @@ io.on('connection', function(socket){
     var ent = room.sockets.get(socket.id);
     if(ent) placeBombFor(room, ent);
   });
+
+  socket.on('sendSticker', function(stickerId){
+    var room = socketRoom(socket);
+    if(!room) return;
+    var ent = room.sockets.get(socket.id);
+    if(!ent) return;
+    if(typeof stickerId !== 'string') return;
+    if(!playerOwnsSticker(ent, stickerId)) return; // não tem esse adesivo
+    var now = Date.now();
+    if(now - ent.lastStickerAt < STICKER_COOLDOWN_MS) return; // anti-spam
+    ent.lastStickerAt = now;
+    io.to(room.code).emit('stickerReceived', { from: socket.id, stickerId: stickerId, ts: now });
+  });  
 
   socket.on('leaveRoom', function(){
     var room = socketRoom(socket);
