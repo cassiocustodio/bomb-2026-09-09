@@ -59,8 +59,13 @@
 
   #end-actions{ display:flex; gap:10px; margin-top:6px; }
   #end-actions .btn{ margin-top:0; width:auto; flex:1; }
-  #peek-btn{ flex:0 0 52px; padding:0; font-size:22px; }
+  #peek-btn{ flex:0 0 auto; width:48px; height:48px; padding:0; font-size:20px; border-radius:50%; border:3px solid var(--gold); background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 0 rgba(0,0,0,.3); }
+  #peek-btn:active{ box-shadow:0 1px 0 rgba(0,0,0,.3); transform:translateY(3px); }
   #peek-btn[hidden]{ display:none; }
+
+  #exit-spectate-btn{ position:fixed; top:calc(10px + env(safe-area-inset-top)); right:14px; width:44px; height:44px; border-radius:50%; background:var(--ink); border:3px solid var(--gold); color:#fff; font-size:18px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 0 rgba(0,0,0,.3); z-index:10; }
+  #exit-spectate-btn:active{ box-shadow:0 1px 0 rgba(0,0,0,.3); transform:translateY(3px); }
+  #exit-spectate-btn[hidden]{ display:none; }
 
   .mode-select{ display:flex; gap:8px; margin:10px 0; }
   .mode-btn{ flex:1; padding:10px 6px; border-radius:12px; border:3px solid var(--crate-dark); background:#fff; color:var(--ink); font-weight:800; font-family:inherit; font-size:14px; cursor:pointer; }
@@ -97,6 +102,7 @@
   </div>
   <div id="shrink-banner" hidden></div>
   <div id="room-code-tag" hidden>SALA <span id="room-code-text"></span></div>
+  <button id="exit-spectate-btn" title="Sair" hidden>🚪</button>  
 
   <div id="joystick-zone" hidden>
     <div id="joystick-hint"></div>
@@ -138,7 +144,7 @@
       <p id="end-subtitle"></p>
       <div id="end-actions">
         <button class="btn" id="restart-btn">Voltar ao menu</button>
-        <button class="btn secondary" id="peek-btn" title="Observar" hidden>👁️</button>
+        <button id="peek-btn" title="Observar" hidden>👁️</button>
       </div>
     </div>
   </div>
@@ -295,8 +301,15 @@
   var stickerTray = document.getElementById('sticker-tray');
   var roomCodeTag = document.getElementById('room-code-tag');
   var peekBtn = document.getElementById('peek-btn');
-
   peekBtn.addEventListener('click', function(){ endScreen.hidden = true; });
+
+  var exitSpectateBtn = document.getElementById('exit-spectate-btn');
+  exitSpectateBtn.addEventListener('click', function(){
+    socket.emit('leaveRoom');
+    location.reload();
+  });
+
+
 
   var selectedMaxPlayers = 4;
   document.querySelectorAll('.mode-btn').forEach(function(btn){
@@ -421,6 +434,7 @@
     lobbyScreen.hidden = true;
     endScreen.hidden = true;
     peekBtn.hidden = true;
+    exitSpectateBtn.hidden = true;
     hud.hidden = false;
     joystickZone.hidden = false;
     bombBtn.hidden = false;
@@ -458,6 +472,7 @@
     }
     endScreen.hidden = false;
     peekBtn.hidden = true;
+    exitSpectateBtn.hidden = true;    
     hud.hidden = true; joystickZone.hidden = true; bombBtn.hidden = true; roomCodeTag.hidden = true; stickerBtn.hidden = true; stickerTray.hidden = true;
     stopMusic();
   });
@@ -471,6 +486,7 @@
     document.getElementById('end-title').textContent = 'Você foi eliminado!';
     document.getElementById('end-subtitle').textContent = 'A partida ainda está rolando para os outros jogadores.';
     peekBtn.hidden = false;
+    exitSpectateBtn.hidden = false;
     endScreen.hidden = false;
     hud.hidden = true; joystickZone.hidden = true; bombBtn.hidden = true;
     stickerBtn.hidden = true; stickerTray.hidden = true; roomCodeTag.hidden = true;
