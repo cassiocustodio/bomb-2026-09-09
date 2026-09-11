@@ -74,6 +74,13 @@
   .divider{ display:flex; align-items:center; gap:10px; margin:16px 0; color:var(--crate-dark); font-weight:700; font-size:13px; }
   .divider::before, .divider::after{ content:''; flex:1; height:2px; background:var(--crate-dark); opacity:.35; }
 
+  .text-input{ width:100%; box-sizing:border-box; font-family:inherit; font-size:15px; padding:12px; border-radius:12px; border:3px solid var(--crate-dark); margin-top:8px; }
+  #auth-buttons{ display:flex; gap:10px; margin-top:8px; }
+  #auth-buttons .btn{ margin-top:0; }
+  #auth-error{ color:var(--accent-dark); font-weight:700; font-size:13px; min-height:18px; margin:6px 0 0; }
+  #auth-logged-in{ display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:6px; font-size:14px; }
+  #auth-logged-in button{ border:none; background:none; font-size:16px; cursor:pointer; }  
+
   #join-code-input{ width:100%; font-family:inherit; font-size:22px; font-weight:800; letter-spacing:6px; text-align:center; text-transform:uppercase; padding:12px; border-radius:12px; border:3px solid var(--crate-dark); margin-top:4px; }
   #menu-error{ color:var(--accent-dark); font-weight:700; font-size:13px; min-height:18px; }
 
@@ -116,6 +123,22 @@
     <div class="card">
       <h1>Bomb Arena Online</h1>
       <p>Crie uma sala pra jogar com amigos, ou entre com um código.</p>
+      <div id="auth-logged-out">
+        <input class="text-input" id="auth-nickname-input" type="text" maxlength="16" placeholder="Apelido (só pra criar conta)" autocomplete="nickname" />
+        <input class="text-input" id="auth-email" type="email" placeholder="E-mail" autocomplete="email" />
+        <input class="text-input" id="auth-password" type="password" placeholder="Senha (mín. 6 caracteres)" autocomplete="current-password" />
+        <div id="auth-buttons">
+          <button class="btn secondary" id="signup-btn">Criar conta</button>
+          <button class="btn" id="login-btn">Entrar</button>
+        </div>
+        <p id="auth-error"></p>
+      </div>
+      <div id="auth-logged-in" hidden>
+        <span>Logado como <strong id="auth-nickname"></strong></span>
+        <button id="logout-btn" title="Sair">🚪</button>
+      </div>
+
+      <div class="divider">ou jogue como convidado</div>      
       <div class="mode-select" id="mode-select">
         <button class="mode-btn" data-players="2">2 jogadores</button>
         <button class="mode-btn active" data-players="4">4 jogadores</button>
@@ -153,6 +176,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 (function(){
   'use strict';
@@ -181,6 +205,61 @@
 
   var socket = io();
   var myId = null;
+
+  var supabaseClient = supabase.createClient(
+    'https://hoqhdnxppbyzqzeoziio.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhvcWhkbnhwcGJ5enF6ZW96aWlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNTYwMzAsImV4cCI6MjEwNDczMjAzMH0.NAac2G9Mams2iDqFMO1EqFM67pLqgHMkNnw-letNBMg'
+  );
+  var currentAccessToken = null; // null = jogando como convidado
+
+  var authLoggedOut = document.getElementById('auth-logged-out');
+  var authLoggedIn = document.getElementById('auth-logged-in');
+  var authError = document.getElementById('auth-error');
+  var authNickname = document.getElementById('auth-nickname');
+
+  function refreshAuthUI(session){
+    if(session){
+      currentAccessToken = session.access_token;
+      authLoggedOut.hidden = true;
+      authLoggedIn.hidden = false;
+      authNickname.textContent = session.user.email;
+    } else {
+      currentAccessToken = null;
+      authLoggedOut.hidden = false;
+      authLoggedIn.hidden = true;
+    }
+  }
+
+  supabaseClient.auth.getSession().then(function(res){ refreshAuthUI(res.data.session); });
+  supabaseClient.auth.onAuthStateChange(function(_event, session){ refreshAuthUI(session); });
+
+  document.getElementById('signup-btn').addEventListener('click', function(){
+    authError.textContent = '';
+    var nickname = document.getElementById('auth-nickname-input').value.trim() || 'Jogador';
+    var email = document.getElementById('auth-email').value.trim();
+    var password = document.getElementById('auth-password').value;
+    if(!email || password.length < 6){ authError.textContent = 'Preencha e-mail e senha (mín. 6 caracteres).'; return; }
+    supabaseClient.auth.signUp({ email: email, password: password, options: { data: { nickname: nickname } } }).then(function(res){
+      if(res.error){ authError.textContent = res.error.message; return; }
+      authError.textContent = 'Conta criada! Se a confirmação por e-mail estiver ativa, confira sua caixa de entrada antes de entrar.';
+    });
+  });
+
+  document.getElementById('login-btn').addEventListener('click', function(){
+    authError.textContent = '';
+    var email = document.getElementById('auth-email').value.trim();
+    var password = document.getElementById('auth-password').value;
+    supabaseClient.auth.signInWithPassword({ email: email, password: password }).then(function(res){
+      if(res.error){ authError.textContent = res.error.message; return; }
+      document.getElementById('auth-email').value = '';
+      document.getElementById('auth-password').value = '';
+    });
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', function(){
+    supabaseClient.auth.signOut();
+  });
+  
   var latestState = null;
   var prevState = null;
   var lastStateArrival = 0;
@@ -322,7 +401,7 @@
 
   document.getElementById('create-room-btn').addEventListener('click', function(){
     ensureAudio();
-    socket.emit('createRoom', {maxPlayers:selectedMaxPlayers}, function(res){
+    socket.emit('createRoom', {maxPlayers:selectedMaxPlayers, accessToken:currentAccessToken}, function(res){
       if(!res || !res.ok){ showMenuError((res&&res.error)||'Não foi possível criar a sala.'); return; }
       onJoinedRoom(res);
     });
@@ -331,7 +410,7 @@
     ensureAudio();
     var code = document.getElementById('join-code-input').value.trim();
     if(!code){ showMenuError('Digite o código da sala.'); return; }
-    socket.emit('joinRoom', {code:code}, function(res){
+    socket.emit('joinRoom', {code:code, accessToken:currentAccessToken}, function(res){
       if(!res || !res.ok){ showMenuError((res&&res.error)||'Não foi possível entrar.'); return; }
       onJoinedRoom(res);
     });
@@ -405,7 +484,7 @@
       row.className = 'player-row';
       if(p){
         row.innerHTML = '<span class="player-dot" style="background:'+colors[i]+'"></span>' +
-          '<span>' + (p.id===myId ? 'Você' : 'Jogador '+(i+1)) + '</span>' +
+          '<span>' + (p.id===myId ? 'Você' : (p.nickname || 'Jogador '+(i+1))) + '</span>' +
           (p.isHost ? '<span class="tag">anfitrião</span>' : '');
         iAmHost = (p.id === myId) ? p.isHost : iAmHost;
       } else {
