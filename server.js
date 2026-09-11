@@ -53,7 +53,8 @@ const BOT_TAG_COLOR = '#9b5de5'; // só usado se sobrar mais de uma cor pra bot 
    - 'premium' : só quem tiver o id em entity.ownedStickers (colecionável/comprado/conquistado).
    O id é o mesmo nome do arquivo em public/stickers/<id>.webp, sem extensão. */
 const STICKER_CATALOG = [
-  { id:'bravo', name:'Bravo!', tier:'standard' }
+  { id:'bravo', name:'Bravo!', tier:'standard' },
+  { id:'raiva', name:'Raiva!', tier:'standard' }
   // adesivos premium futuros entram aqui, ex:
   // { id:'confete', name:'Confete', tier:'premium' }
 ];
