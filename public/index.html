@@ -39,6 +39,12 @@
   #joystick-thumb{ position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%; background:rgba(255,255,255,.85); border:3px solid var(--crate-dark); }
   #bomb-btn{ position:fixed; right:26px; bottom:calc(26px + env(safe-area-inset-bottom)); width:86px; height:86px; border-radius:50%; background:var(--accent); border:4px solid var(--accent-dark); color:#fff; font-size:34px; box-shadow:0 6px 0 var(--accent-dark); touch-action:none; cursor:pointer; }
   #bomb-btn:active{ box-shadow:0 2px 0 var(--accent-dark); transform:translateY(4px); }
+  #sticker-btn{ position:fixed; right:26px; bottom:calc(122px + env(safe-area-inset-bottom)); width:58px; height:58px; border-radius:50%; background:#fff; border:4px solid var(--crate-dark); color:var(--ink); font-size:26px; display:flex; align-items:center; justify-content:center; box-shadow:0 5px 0 var(--crate-dark); touch-action:none; cursor:pointer; }
+  #sticker-btn:active{ box-shadow:0 1px 0 var(--crate-dark); transform:translateY(4px); }
+  #sticker-tray{ position:fixed; right:20px; bottom:calc(190px + env(safe-area-inset-bottom)); background:var(--panel); border:3px solid var(--crate-dark); border-radius:16px; padding:10px; display:flex; gap:8px; flex-wrap:wrap; max-width:220px; box-shadow:0 8px 0 rgba(0,0,0,.18); z-index:15; }
+  #sticker-tray[hidden]{ display:none; }
+  .sticker-thumb{ width:56px; height:56px; border-radius:10px; border:2px solid var(--crate-dark); background:#fff; object-fit:contain; cursor:pointer; padding:2px; }
+  .sticker-thumb:active{ transform:scale(0.92); }
 
   .overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(20,30,20,.55); z-index:20; padding:20px; }
   .overlay[hidden]{ display:none; }
@@ -91,6 +97,8 @@
   </div>
   <div id="joystick-visual"><div id="joystick-thumb"></div></div>
   <button id="bomb-btn" hidden>💣</button>
+  <button id="sticker-btn" hidden>💬</button>
+  <div id="sticker-tray" hidden></div>
 
   <div class="overlay" id="menu-screen">
     <div class="card">
@@ -166,6 +174,12 @@
   var particles = []; // debris de explosão e fragmentos do "pop" de power-up
   var pops = []; // anéis de choque do "pop" de power-up
   var shake = { mag:0, t:0 }; // tremor de tela
+  var myStickerCatalog = [];   // catálogo {id,name,tier} recebido do servidor
+  var myOwnedStickers = [];    // ids premium extras que este jogador possui
+  var stickerImages = {};      // id -> Image pré-carregada
+  var activeStickers = [];     // {entityId, id, until} balões visíveis agora
+  var STICKER_SHOW_MS = 2600;  // quanto tempo o adesivo fica na tela
+  var nextStickerAllowedAt = 0;
 
   var canvas = document.getElementById('game-canvas');
   var ctx = canvas.getContext('2d');
@@ -267,6 +281,8 @@
   var hud = document.getElementById('hud');
   var joystickZone = document.getElementById('joystick-zone');
   var bombBtn = document.getElementById('bomb-btn');
+  var stickerBtn = document.getElementById('sticker-btn');
+  var stickerTray = document.getElementById('sticker-tray');
   var roomCodeTag = document.getElementById('room-code-tag');
 
   var selectedMaxPlayers = 4;
@@ -307,7 +323,50 @@
     lobbyScreen.hidden = false;
     document.getElementById('start-match-btn').hidden = !iAmHost;
     document.getElementById('lobby-hint').hidden = iAmHost;
+
+    myStickerCatalog = res.stickers || [];
+    myOwnedStickers = res.ownedStickers || [];
+    preloadStickerImages();
+    buildStickerTray();
   }
+
+  function ownsSticker(s){ return s.tier==='standard' || myOwnedStickers.indexOf(s.id)!==-1; }
+
+  function preloadStickerImages(){
+    myStickerCatalog.forEach(function(s){
+      if(stickerImages[s.id]) return;
+      var img = new Image();
+      img.src = '/stickers/' + s.id + '.webp';
+      stickerImages[s.id] = img;
+    });
+  }
+
+  function buildStickerTray(){
+    stickerTray.innerHTML = '';
+    myStickerCatalog.filter(ownsSticker).forEach(function(s){
+      var img = document.createElement('img');
+      img.className = 'sticker-thumb';
+      img.src = '/stickers/' + s.id + '.webp';
+      img.title = s.name;
+      img.addEventListener('click', function(){
+        var now = performance.now();
+        if(now < nextStickerAllowedAt) return;
+        nextStickerAllowedAt = now + 1200;
+        socket.emit('sendSticker', s.id);
+        stickerTray.hidden = true;
+      });
+      stickerTray.appendChild(img);
+    });
+  }
+
+  stickerBtn.addEventListener('click', function(){
+    stickerTray.hidden = !stickerTray.hidden;
+  });
+
+  socket.on('stickerReceived', function(data){
+    activeStickers = activeStickers.filter(function(a){ return a.entityId !== data.from; });
+    activeStickers.push({ entityId: data.from, id: data.stickerId, until: performance.now() + STICKER_SHOW_MS });
+  });
 
   socket.on('lobbyUpdate', function(data){
     if(data.code !== currentRoomCode) return;
@@ -351,6 +410,7 @@
     hud.hidden = false;
     joystickZone.hidden = false;
     bombBtn.hidden = false;
+    stickerBtn.hidden = false;
     roomCodeTag.hidden = false;
     prevState = null;
     ringsVanishedSeen = 0;
@@ -383,7 +443,7 @@
       sfx.death();
     }
     endScreen.hidden = false;
-    hud.hidden = true; joystickZone.hidden = true; bombBtn.hidden = true; roomCodeTag.hidden = true;
+    hud.hidden = true; joystickZone.hidden = true; bombBtn.hidden = true; roomCodeTag.hidden = true; stickerBtn.hidden = true; stickerTray.hidden = true;
     stopMusic();
   });
 
@@ -633,6 +693,25 @@
     ctx.strokeStyle = 'rgba('+r+','+g+','+b+','+pulse.toFixed(2)+')';
     ctx.stroke();
   }
+  function drawStickers(renderEntities){
+    var now = performance.now();
+    activeStickers = activeStickers.filter(function(a){ return a.until > now; });
+    activeStickers.forEach(function(a){
+      var ent = renderEntities.find(function(e){ return e.id===a.entityId; });
+      if(!ent || !ent.alive) return;
+      var img = stickerImages[a.id];
+      if(!img || !img.complete || !img.naturalWidth) return;
+      var life = a.until - now;
+      var age = STICKER_SHOW_MS - life;
+      var alpha = Math.min(1, age/120, life/300);
+      var pop = age<160 ? 1 + 0.25*Math.sin(Math.min(1,age/160)*Math.PI) : 1;
+      var w = CELL*1.7*pop, h = w*(img.naturalHeight/img.naturalWidth);
+      var px = ent.x*CELL, py = ent.y*CELL - (ent.r||0.33)*CELL - h*0.55 - 6;
+      ctx.save(); ctx.globalAlpha = alpha;
+      ctx.drawImage(img, px-w/2, py-h, w, h);
+      ctx.restore();
+    });
+  }
   function drawEntity(entity){
     var px=entity.x*CELL, py=entity.y*CELL;
     var rad=(entity.r||0.33)*CELL;
@@ -725,7 +804,9 @@
     s.powerups.forEach(drawPowerup);
     s.bombs.forEach(drawBomb);
     s.explosions.forEach(drawExplosion);
-    getRenderEntities(s).forEach(drawEntity);
+    var renderEntities = getRenderEntities(s);
+    renderEntities.forEach(drawEntity);
+    drawStickers(renderEntities);
     drawParticles();
     drawPops();
     ctx.restore();
