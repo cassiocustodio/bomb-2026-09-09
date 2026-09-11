@@ -706,8 +706,8 @@
       var alpha = Math.min(1, age/120, life/300);
       var pop = age<160 ? 1 + 0.25*Math.sin(Math.min(1,age/160)*Math.PI) : 1;
       var w = CELL*1.7*pop, h = w*(img.naturalHeight/img.naturalWidth);
-      var STICKER_OFFSET_X = 14;  // + desloca pra direita, - desloca pra esquerda
-      var STICKER_OFFSET_Y = 18;  // + desce, - sobe
+      var STICKER_OFFSET_X = 30;  // + desloca pra direita, - desloca pra esquerda
+      var STICKER_OFFSET_Y = 40;  // + desce, - sobe
       var px = ent.x*CELL + STICKER_OFFSET_X, py = ent.y*CELL - (ent.r||0.33)*CELL - h*0.55 - 6 + STICKER_OFFSET_Y;
       ctx.save(); ctx.globalAlpha = alpha;
       ctx.drawImage(img, px-w/2, py-h, w, h);
