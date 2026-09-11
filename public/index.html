@@ -184,6 +184,7 @@
   var canvas = document.getElementById('game-canvas');
   var ctx = canvas.getContext('2d');
   var CELL = 40;
+  var CANVAS_PAD = 0, CANVAS_W = 0, CANVAS_H = 0; // margem extra ao redor do tabuleiro, calculada no resize
 
   /* ==================== ÁUDIO (sintetizado, igual ao protótipo) ==================== */
   var audioCtx=null, masterGain=null, musicGain=null, muted=false;
@@ -788,9 +789,9 @@
   function render(){
     if(!latestState || !latestState.grid) return;
     var s = latestState;
-    var w = CELL*CFG.cols, h = CELL*CFG.rows;
-    ctx.clearRect(-20,-20,w+40,h+40);
+    ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
     ctx.save();
+    ctx.translate(CANVAS_PAD, CANVAS_PAD);
     var off = currentShakeOffset();
     ctx.translate(off.x, off.y);
     for(var y=0;y<CFG.rows;y++){
@@ -818,9 +819,12 @@
   /* ==================== RESIZE ==================== */
   function resizeCanvas(){
     var availW = window.innerWidth - 16, availH = window.innerHeight - 16;
-    var rawCell = Math.floor(Math.min(availW/CFG.cols, availH/CFG.rows));
+    var padCells = 1.4; // margem extra (em "células") ao redor do tabuleiro — ajuste à vontade
+    var rawCell = Math.floor(Math.min(availW/(CFG.cols+padCells*2), availH/(CFG.rows+padCells*2)));
     CELL = Math.max(20, rawCell);
-    var cssW = CELL*CFG.cols, cssH = CELL*CFG.rows;
+    CANVAS_PAD = Math.round(CELL*padCells);
+    var cssW = CELL*CFG.cols + CANVAS_PAD*2, cssH = CELL*CFG.rows + CANVAS_PAD*2;
+    CANVAS_W = cssW; CANVAS_H = cssH;
     var dpr = Math.min(window.devicePixelRatio||1, 2);
     canvas.style.width = cssW+'px'; canvas.style.height = cssH+'px';
     canvas.width = Math.round(cssW*dpr); canvas.height = Math.round(cssH*dpr);
