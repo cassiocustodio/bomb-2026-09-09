@@ -43,6 +43,12 @@
   #sticker-btn:active{ box-shadow:0 1px 0 var(--crate-dark); transform:translateY(4px); }
   #sticker-tray{ position:fixed; right:20px; bottom:calc(190px + env(safe-area-inset-bottom)); background:var(--panel); border:3px solid var(--crate-dark); border-radius:16px; padding:10px; display:flex; gap:8px; flex-wrap:wrap; max-width:220px; box-shadow:0 8px 0 rgba(0,0,0,.18); z-index:15; }
   #sticker-tray[hidden]{ display:none; }
+  #spectator-prompt{ position:fixed; top:16px; left:50%; transform:translateX(-50%); background:var(--panel); border:3px solid var(--crate-dark); border-radius:14px; padding:12px 16px; text-align:center; box-shadow:0 8px 0 rgba(0,0,0,.18); z-index:15; max-width:280px; }
+  #spectator-prompt[hidden]{ display:none; }
+  #spectator-prompt p{ margin:0 0 10px; font-weight:700; color:var(--ink); }
+  #spectator-prompt .spectator-actions{ display:flex; gap:8px; justify-content:center; }
+  #spectator-prompt button{ border:3px solid var(--crate-dark); border-radius:10px; padding:6px 12px; font-weight:700; cursor:pointer; background:#fff; color:var(--ink); }
+  #leave-match-btn{ background:#ff5a5a; color:#fff; }
   .sticker-thumb{ width:56px; height:56px; border-radius:10px; border:2px solid var(--crate-dark); background:#fff; object-fit:contain; cursor:pointer; padding:2px; }
   .sticker-thumb:active{ transform:scale(0.92); }
 
@@ -99,6 +105,13 @@
   <button id="bomb-btn" hidden>💣</button>
   <button id="sticker-btn" hidden>💬</button>
   <div id="sticker-tray" hidden></div>
+    <div id="spectator-prompt" hidden>
+    <p>Você foi eliminado.</p>
+    <div class="spectator-actions">
+      <button id="keep-watching-btn">Continuar assistindo</button>
+      <button id="leave-match-btn">Sair e jogar outra</button>
+    </div>
+  </div>
 
   <div class="overlay" id="menu-screen">
     <div class="card">
@@ -285,6 +298,15 @@
   var stickerBtn = document.getElementById('sticker-btn');
   var stickerTray = document.getElementById('sticker-tray');
   var roomCodeTag = document.getElementById('room-code-tag');
+  var spectatorPrompt = document.getElementById('spectator-prompt');
+  var keepWatchingBtn = document.getElementById('keep-watching-btn');
+  var leaveMatchBtn = document.getElementById('leave-match-btn');
+
+  keepWatchingBtn.addEventListener('click', function(){ spectatorPrompt.hidden = true; });
+  leaveMatchBtn.addEventListener('click', function(){
+    socket.emit('leaveRoom');
+    location.reload();
+  });
 
   var selectedMaxPlayers = 4;
   document.querySelectorAll('.mode-btn').forEach(function(btn){
@@ -408,6 +430,7 @@
     document.body.classList.toggle('theme-ice', currentTheme==='ice');
     lobbyScreen.hidden = true;
     endScreen.hidden = true;
+    spectatorPrompt.hidden = true;
     hud.hidden = false;
     joystickZone.hidden = false;
     bombBtn.hidden = false;
@@ -444,6 +467,7 @@
       sfx.death();
     }
     endScreen.hidden = false;
+    spectatorPrompt.hidden = true;
     hud.hidden = true; joystickZone.hidden = true; bombBtn.hidden = true; roomCodeTag.hidden = true; stickerBtn.hidden = true; stickerTray.hidden = true;
     stopMusic();
   });
@@ -495,7 +519,7 @@
     var meOld = prev.entities.find(function(e){ return e.id===myId; });
     var meNew = cur.entities.find(function(e){ return e.id===myId; });
     if(meOld && meNew){
-      if(meOld.alive && !meNew.alive) sfx.death();
+      if(meOld.alive && !meNew.alive){ sfx.death(); spectatorPrompt.hidden = false; }
       else if(meNew.alive && (meNew.maxBombs>meOld.maxBombs || meNew.fireRange>meOld.fireRange || meNew.speedLevel>meOld.speedLevel)) sfx.pickup();
     }
   }
